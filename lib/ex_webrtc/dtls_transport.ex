@@ -52,17 +52,23 @@ defmodule ExWebRTC.DTLSTransport do
   * `ice_transport` - the module implementing the `ExICE.ICETransport` behavior.
   * `ice_pid` - the PID of the ICE transport process which the DTLSTransport interacts with.
   * `logger_metadata` - a keyword list of metadata to be attached to the Logger for all logs emitted by the DTLSTransport process.
+  * `cert` - DER-encoded X.509 certificate to use for DTLS. When `nil`, a self-signed certificate is generated internally.
+  * `pkey` - DER-encoded private key matching `cert`. Must be set together with `cert`.
   """
   @type opts() :: [
           ice_transport: ICETransport.t(),
           ice_pid: pid(),
-          logger_metadata: Enumerable.t({atom(), term()})
+          logger_metadata: Enumerable.t({atom(), term()}),
+          cert: binary() | nil,
+          pkey: binary() | nil
         ]
 
   @spec start_link(opts()) :: GenServer.on_start()
   def start_link(opts) do
     ice_transport = opts[:ice_transport] || DefaultICETransport
     logger_metadata = opts[:logger_metadata] || []
+    cert = opts[:cert]
+    pkey = opts[:pkey]
 
     ice_pid = Keyword.fetch!(opts, :ice_pid)
 
@@ -72,7 +78,10 @@ defmodule ExWebRTC.DTLSTransport do
       raise "DTLSTransport requires ice_transport to implement ExWebRTC.ICETransport behaviour."
     end
 
-    GenServer.start_link(__MODULE__, [ice_transport, ice_pid, self(), logger_metadata])
+    GenServer.start_link(
+      __MODULE__,
+      [ice_transport, ice_pid, self(), logger_metadata, cert, pkey]
+    )
   end
 
   @spec set_ice_connected(dtls_transport()) :: :ok
@@ -135,10 +144,15 @@ defmodule ExWebRTC.DTLSTransport do
   end
 
   @impl true
-  def init([ice_transport, ice_pid, owner, logger_metadata]) do
+  def init([ice_transport, ice_pid, owner, logger_metadata, cert, pkey]) do
     Logger.metadata(logger_metadata)
 
-    {pkey, cert} = ExDTLS.generate_key_cert()
+    {pkey, cert} =
+      case {pkey, cert} do
+        {nil, nil} -> ExDTLS.generate_key_cert()
+        {pkey, cert} -> {pkey, cert}
+      end
+
     fingerprint = ExDTLS.get_cert_fingerprint(cert)
 
     state = %{

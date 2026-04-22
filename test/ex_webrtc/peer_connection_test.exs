@@ -307,6 +307,18 @@ defmodule ExWebRTC.PeerConnectionTest do
     assert PeerConnection.get_dtls_transport_state(pc) == :new
   end
 
+  test "uses externally-supplied DTLS certificate and pkey" do
+    {pkey, cert} = ExDTLS.generate_key_cert()
+    expected_fingerprint = cert |> ExDTLS.get_cert_fingerprint() |> Utils.hex_dump()
+    expected_base64 = Base.encode64(cert)
+
+    {:ok, pc} = PeerConnection.start_link(certificate: cert, pkey: pkey)
+
+    stats = PeerConnection.get_stats(pc)
+    assert stats.local_certificate.fingerprint == expected_fingerprint
+    assert stats.local_certificate.base64_certificate == expected_base64
+  end
+
   describe "get_local_description/1" do
     test "includes ICE candidates" do
       {:ok, pc} = PeerConnection.start()

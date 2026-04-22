@@ -454,6 +454,25 @@ defmodule ExWebRTC.DTLSTransportTest do
     assert false == Process.alive?(dtls)
   end
 
+  test "uses externally-supplied certificate and pkey when provided" do
+    {pkey, cert} = ExDTLS.generate_key_cert()
+    expected_fingerprint = ExDTLS.get_cert_fingerprint(cert)
+
+    {:ok, ice_pid} = MockICETransport.start_link(tester: self())
+
+    assert {:ok, dtls} =
+             DTLSTransport.start_link(
+               ice_transport: MockICETransport,
+               ice_pid: ice_pid,
+               cert: cert,
+               pkey: pkey
+             )
+
+    assert DTLSTransport.get_fingerprint(dtls) == expected_fingerprint
+
+    :ok = DTLSTransport.stop(dtls)
+  end
+
   defp setup_srtp(lkm, rkm, profile) do
     in_srtp = ExLibSRTP.new()
     out_srtp = ExLibSRTP.new()

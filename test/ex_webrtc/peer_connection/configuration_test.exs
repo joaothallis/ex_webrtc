@@ -182,6 +182,40 @@ defmodule ExWebRTC.PeerConnection.ConfigurationTest do
       options = [video_codecs: [@h264_codec, @vp8_codec]]
       assert_raise RuntimeError, fn -> Configuration.from_options!(options) end
     end
+
+    test "accepts an externally provided DTLS certificate and private key" do
+      {pkey, cert} = ExDTLS.generate_key_cert()
+
+      config =
+        Configuration.from_options!(
+          controlling_process: self(),
+          certificate: cert,
+          pkey: pkey
+        )
+
+      assert %Configuration{certificate: ^cert, pkey: ^pkey} = config
+    end
+
+    test "defaults certificate and pkey to nil" do
+      config = Configuration.from_options!(controlling_process: self())
+      assert %Configuration{certificate: nil, pkey: nil} = config
+    end
+
+    test "raises when only certificate is provided" do
+      {_pkey, cert} = ExDTLS.generate_key_cert()
+
+      assert_raise RuntimeError, fn ->
+        Configuration.from_options!(certificate: cert)
+      end
+    end
+
+    test "raises when only pkey is provided" do
+      {pkey, _cert} = ExDTLS.generate_key_cert()
+
+      assert_raise RuntimeError, fn ->
+        Configuration.from_options!(pkey: pkey)
+      end
+    end
   end
 
   describe "update/2" do

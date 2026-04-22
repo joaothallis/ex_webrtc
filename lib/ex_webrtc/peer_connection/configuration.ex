@@ -195,6 +195,25 @@ defmodule ExWebRTC.PeerConnection.Configuration do
   * bundle_policy - `max_bundle`
   * ice_candidate_pool_size - `0`
   * rtcp_mux_policy - `require`
+
+  ## DTLS certificate
+
+  * `certificate` - DER-encoded X.509 certificate to use for DTLS.
+  * `pkey` - DER-encoded private key matching `certificate`.
+
+  Both must be provided together, or both omitted. When omitted (the default),
+  each `PeerConnection` generates its own self-signed RSA-2048 certificate at
+  startup via `ExDTLS.generate_key_cert/0`.
+
+  Passing an externally-generated pair is useful when you want to:
+    * use an ECDSA key (smaller DTLS flights, less prone to MTU-driven
+      fragmentation through TURN),
+    * reuse a single certificate across multiple `PeerConnection`s belonging
+      to the same call/session.
+
+  The certificate and key are passed directly to `ExDTLS.init/1`, which
+  auto-detects RSA vs EC in the underlying NIF. Callers are responsible for
+  generating a valid self-signed pair (e.g. via `:public_key` or `openssl`).
   """
   @type options() :: [
           controlling_process: Process.dest(),
@@ -210,7 +229,9 @@ defmodule ExWebRTC.PeerConnection.Configuration do
           features: [feature()],
           rtp_header_extensions: [rtp_header_extension()],
           rtcp_feedbacks: [rtcp_feedback()],
-          logger_metadata: Enumerable.t({atom(), term()})
+          logger_metadata: Enumerable.t({atom(), term()}),
+          certificate: binary(),
+          pkey: binary()
         ]
 
   @typedoc """
@@ -233,7 +254,9 @@ defmodule ExWebRTC.PeerConnection.Configuration do
           audio_extensions: [Extmap.t()],
           video_extensions: [Extmap.t()],
           features: [feature()],
-          logger_metadata: Enumerable.t({atom(), term()})
+          logger_metadata: Enumerable.t({atom(), term()}),
+          certificate: binary() | nil,
+          pkey: binary() | nil
         }
 
   @enforce_keys [
@@ -253,7 +276,9 @@ defmodule ExWebRTC.PeerConnection.Configuration do
                 audio_codecs: @default_audio_codecs,
                 video_codecs: @default_video_codecs,
                 features: @default_features,
-                logger_metadata: []
+                logger_metadata: [],
+                certificate: nil,
+                pkey: nil
               ]
 
   @doc """
@@ -317,8 +342,19 @@ defmodule ExWebRTC.PeerConnection.Configuration do
     |> expand_default_codecs()
     |> then(&struct(__MODULE__, &1))
     |> ensure_unique_payload_types()
+    |> ensure_cert_pkey_valid()
     |> populate_feedbacks(feedbacks)
     |> add_features()
+  end
+
+  defp ensure_cert_pkey_valid(%__MODULE__{certificate: nil, pkey: nil} = config), do: config
+
+  defp ensure_cert_pkey_valid(%__MODULE__{certificate: c, pkey: p} = config)
+       when is_binary(c) and is_binary(p),
+       do: config
+
+  defp ensure_cert_pkey_valid(_config) do
+    raise "`certificate` and `pkey` must be provided together (or both omitted)."
   end
 
   defp ensure_unique_payload_types(config) do

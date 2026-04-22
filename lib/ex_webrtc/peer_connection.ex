@@ -626,6 +626,8 @@ defmodule ExWebRTC.PeerConnection do
     dtls_config = [
       ice_transport: DefaultICETransport,
       ice_pid: ice_pid,
+      cert: config.certificate,
+      pkey: config.pkey,
       logger_metadata: config.logger_metadata
     ]
 
