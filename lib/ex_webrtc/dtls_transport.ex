@@ -623,8 +623,15 @@ defmodule ExWebRTC.DTLSTransport do
   end
 
   defp do_close(state, opts \\ []) do
-    {:ok, packets} = ExDTLS.close(state.dtls)
-    :ok = do_send(state, packets)
+    # ex_dtls 0.18 rejects nil state references at the NIF boundary, so we
+    # only need to flush when a DTLS context has actually been initialized
+    # (i.e. start_dtls/2 has been called). Without this guard any close that
+    # races the handshake — including an abandoned ICE gather — crashes the
+    # GenServer with {:unifex_parse_arg, {:state, ~c":state"}}.
+    if state.dtls do
+      {:ok, packets} = ExDTLS.close(state.dtls)
+      :ok = do_send(state, packets)
+    end
 
     %{
       state
