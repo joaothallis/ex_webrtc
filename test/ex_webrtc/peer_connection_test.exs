@@ -201,6 +201,23 @@ defmodule ExWebRTC.PeerConnectionTest do
     end
   end
 
+  test "forwards DTLSTransport :diagnostics signal to owner" do
+    {:ok, pc} = PeerConnection.start_link()
+
+    payload = %{records_received: [%{t_ms: 0, content_type: :alert}]}
+    send(pc, {:dtls_transport, self(), {:diagnostics, payload}})
+
+    assert_receive {:ex_webrtc, ^pc, {:dtls_transport_diagnostics, ^payload}}
+  end
+
+  test "forwards DTLSTransport :failure_reason signal to owner" do
+    {:ok, pc} = PeerConnection.start_link()
+
+    send(pc, {:dtls_transport, self(), {:failure_reason, :handshake_error}})
+
+    assert_receive {:ex_webrtc, ^pc, {:dtls_transport_failure_reason, :handshake_error}}
+  end
+
   # API TESTS
 
   test "controlling process" do
